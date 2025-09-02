@@ -13,12 +13,23 @@ func main() {
 	}
 	defer f.Close()
 
+	var line string
+
 	for {
 		data := make([]byte, 8)
 		_, err := f.Read(data)
 		if err != nil {
 			return
 		}
-		fmt.Printf("read: %s\n", data)
+
+		for _, s := range string(data) {
+			if s == '\n' {
+				fmt.Printf("read: %s\n", line)
+				line = ""
+				continue
+			}
+			line += string(s)
+		}
+
 	}
 }
