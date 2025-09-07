@@ -2,16 +2,16 @@ package headers
 
 import (
 	"bytes"
-	"errors"
+	"fmt"
 	"strings"
 )
 
-type Headers map[string]string
-
 const crlf = "\r\n"
 
+type Headers map[string]string
+
 func NewHeaders() Headers {
-	return Headers{}
+	return map[string]string{}
 }
 
 func (h Headers) Parse(data []byte) (n int, done bool, err error) {
@@ -20,29 +20,25 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 		return 0, false, nil
 	}
 	if idx == 0 {
-		return idx + 2, true, nil
+		// the empty line
+		// headers are done, consume the CRLF
+		return 2, true, nil
 	}
-	fieldLineText := string(data[:idx])
-	fieldLine, err := fieldLikeFromString(fieldLineText)
-	if err != nil {
-		return 0, false, err
+
+	parts := bytes.SplitN(data[:idx], []byte(":"), 2)
+	key := string(parts[0])
+
+	if key != strings.TrimRight(key, " ") {
+		return 0, false, fmt.Errorf("invalid header name: %s", key)
 	}
-	sepIdx := bytes.Index([]byte(fieldLine), []byte(":"))
-	h[fieldLine[:sepIdx]] = fieldLine[sepIdx+1:]
+
+	value := bytes.TrimSpace(parts[1])
+	key = strings.TrimSpace(key)
+
+	h.Set(key, string(value))
 	return idx + 2, false, nil
 }
 
-func fieldLikeFromString(fieldLineText string) (string, error) {
-	fieldLineText = strings.TrimSpace(fieldLineText)
-	idx := bytes.Index([]byte(fieldLineText), []byte(":"))
-	if idx == -1 {
-		return "", errors.New("Invalid header")
-	}
-	fieldName := fieldLineText[:idx]
-	if strings.Contains(fieldName, " ") {
-		return "", errors.New("Field name contains space")
-	}
-	fieldValue := fieldLineText[idx+1:]
-	fieldValue = strings.TrimSpace(fieldValue)
-	return fieldName + ":" + fieldValue, nil
+func (h Headers) Set(key, value string) {
+	h[key] = value
 }
