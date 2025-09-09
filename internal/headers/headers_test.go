@@ -75,3 +75,10 @@ func TestHeadersParse(t *testing.T) {
 	assert.Equal(t, 23, n)
 	assert.False(t, done)
 }
+
+func TestMalformedHeader(t *testing.T) {
+	h := NewHeaders()
+	data := []byte("Host localhost:42069\r\n")
+	_, _, err := h.Parse(data)
+	require.Error(t, err)
+}

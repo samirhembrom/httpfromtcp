@@ -27,6 +27,9 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	}
 
 	parts := bytes.SplitN(data[:idx], []byte(":"), 2)
+	if len(parts) != 2 {
+		return 0, false, fmt.Errorf("malformed header: %q", data[:idx])
+	}
 	key := strings.ToLower(string(parts[0]))
 
 	if key != strings.TrimRight(key, " ") {
