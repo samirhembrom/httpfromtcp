@@ -77,3 +77,11 @@ func isTokenChar(c byte) bool {
 	}
 	return slices.Contains(tokenChars, c)
 }
+
+func (h Headers) Get(key string) (string, bool) {
+	contLen, exist := h[strings.ToLower(key)]
+	if !exist {
+		return "", false
+	}
+	return contLen, true
+}
