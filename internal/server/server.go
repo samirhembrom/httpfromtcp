@@ -2,32 +2,46 @@ package server
 
 import (
 	"fmt"
+	"log"
 	"net"
+	"sync/atomic"
 )
 
+// Server is an HTTP 1.1 server
 type Server struct {
-	l net.Listener
+	listener net.Listener
+	closed   atomic.Bool
 }
 
 func Serve(port int) (*Server, error) {
-	l, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
-		return &Server{}, err
+		return nil, err
 	}
-	server := &Server{l: l}
-	go server.listen()
-	return server, nil
+	s := &Server{
+		listener: listener,
+	}
+	go s.listen()
+	return s, nil
 }
 
 func (s *Server) Close() error {
-	return s.l.Close()
+	s.closed.Store(true)
+	if s.listener != nil {
+		return s.listener.Close()
+	}
+	return nil
 }
 
 func (s *Server) listen() {
 	for {
-		conn, err := s.l.Accept()
+		conn, err := s.listener.Accept()
 		if err != nil {
-			return
+			if s.closed.Load() {
+				return
+			}
+			log.Printf("Error accepting connection: %v", err)
+			continue
 		}
 		go s.handle(conn)
 	}
@@ -35,10 +49,11 @@ func (s *Server) listen() {
 
 func (s *Server) handle(conn net.Conn) {
 	defer conn.Close()
-	resp := "HTTP/1.1 200 OK\r\n" +
-		"Content-Type: text/plain\r\n" +
-		"Content-Length: 13\r\n" +
-		"\r\n" +
-		"Hello World!\n"
-	conn.Write([]byte(resp))
+	response := "HTTP/1.1 200 OK\r\n" + // Status line
+		"Content-Type: text/plain\r\n" + // Example header
+		"Content-Length: 13\r\n" + // Content length header
+		"\r\n" + // Blank line to separate headers from the body
+		"Hello World!\n" // Body
+	conn.Write([]byte(response))
+	return
 }
