@@ -1,11 +1,14 @@
 package server
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"sync/atomic"
 
+	"github.com/samirhembrom/httpfromtcp/internal/request"
 	"github.com/samirhembrom/httpfromtcp/internal/response"
 )
 
@@ -15,7 +18,14 @@ type Server struct {
 	closed   atomic.Bool
 }
 
-func Serve(port int) (*Server, error) {
+type HandlerError struct {
+	StatusCode int
+	Message    string
+}
+
+type Handler func(io.Writer, *request.Request) HandlerError
+
+func Serve(port int, f Handler) (*Server, error) {
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return nil, err
@@ -23,7 +33,7 @@ func Serve(port int) (*Server, error) {
 	s := &Server{
 		listener: listener,
 	}
-	go s.listen()
+	go s.listen(f)
 	return s, nil
 }
 
@@ -35,7 +45,7 @@ func (s *Server) Close() error {
 	return nil
 }
 
-func (s *Server) listen() {
+func (s *Server) listen(f Handler) {
 	for {
 		conn, err := s.listener.Accept()
 		if err != nil {
@@ -45,14 +55,38 @@ func (s *Server) listen() {
 			log.Printf("Error accepting connection: %v", err)
 			continue
 		}
-		go s.handle(conn)
+		go s.handle(conn, f)
 	}
 }
 
-func (s *Server) handle(conn net.Conn) {
+func (s *Server) handle(conn net.Conn, f Handler) {
 	defer conn.Close()
+	requestData, err := request.RequestFromReader(conn)
+	if err != nil {
+		writeHandlerError(conn, HandlerError{StatusCode: 500, Message: "Internal server error"})
+		return
+	}
+
+	buf := bytes.Buffer{}
+	handlerErr := f(&buf, requestData)
+	if handlerErr.Message != "" {
+		writeHandlerError(
+			conn,
+			HandlerError{StatusCode: handlerErr.StatusCode, Message: handlerErr.Message},
+		)
+		return
+	}
+
 	response.WriteStatusLine(conn, 200)
-	headers := response.GetDefaultHeaders(0)
+	headers := response.GetDefaultHeaders(len(buf.Bytes()))
 	response.WriteHeaders(conn, headers)
+	conn.Write(buf.Bytes())
 	return
+}
+
+func writeHandlerError(w io.Writer, h HandlerError) {
+	response.WriteStatusLine(w, response.StatusCode(h.StatusCode))
+	headers := response.GetDefaultHeaders(len(h.Message))
+	response.WriteHeaders(w, headers)
+	w.Write([]byte(h.Message))
 }
