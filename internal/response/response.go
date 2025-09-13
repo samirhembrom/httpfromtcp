@@ -1,6 +1,7 @@
 package response
 
 import (
+	"fmt"
 	"io"
 	"strconv"
 
@@ -8,6 +9,19 @@ import (
 )
 
 type StatusCode int
+
+type WriteState int
+
+type Writer struct {
+	w          io.Writer
+	writeState WriteState
+}
+
+const (
+	WritingStatusLine WriteState = iota
+	WritingHeaders
+	WritingBody
+)
 
 const (
 	StatusOK            StatusCode = 200
@@ -51,4 +65,47 @@ func WriteHeaders(w io.Writer, headers headers.Headers) error {
 	}
 	w.Write([]byte("\r\n"))
 	return nil
+}
+
+func (w *Writer) WriteStatusLine(statusCode StatusCode) error {
+	if w.writeState != WritingStatusLine {
+		return fmt.Errorf("writes not in correct order")
+	}
+
+	err := WriteStatusLine(w.w, statusCode)
+	if err != nil {
+		return err
+	}
+	w.writeState = WritingHeaders
+	return nil
+}
+
+func (w *Writer) WriteHeaders(headers headers.Headers) error {
+	if w.writeState != WritingHeaders {
+		return fmt.Errorf("writes not in correct order")
+	}
+	err := WriteHeaders(w.w, headers)
+	if err != nil {
+		return err
+	}
+	w.writeState = WritingBody
+	return nil
+}
+
+func (w *Writer) WriteBody(p []byte) (int, error) {
+	if w.writeState != WritingBody {
+		return 0, fmt.Errorf("writes not in correct order")
+	}
+	n, err := w.w.Write(p)
+	if err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
+func NewWriter(w io.Writer) *Writer {
+	return &Writer{
+		w:          w,
+		writeState: WritingStatusLine,
+	}
 }

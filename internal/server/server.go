@@ -23,7 +23,7 @@ type HandlerError struct {
 	Message    string
 }
 
-type Handler func(io.Writer, *request.Request) HandlerError
+type Handler func(*response.Writer, *request.Request)
 
 func Serve(port int, f Handler) (*Server, error) {
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
@@ -68,18 +68,9 @@ func (s *Server) handle(conn net.Conn, f Handler) {
 	}
 
 	buf := bytes.Buffer{}
-	handlerErr := f(&buf, requestData)
-	if handlerErr.Message != "" {
-		writeHandlerError(
-			conn,
-			HandlerError{StatusCode: handlerErr.StatusCode, Message: handlerErr.Message},
-		)
-		return
-	}
+	writers := response.NewWriter(&buf)
+	f(writers, requestData)
 
-	response.WriteStatusLine(conn, 200)
-	headers := response.GetDefaultHeaders(len(buf.Bytes()))
-	response.WriteHeaders(conn, headers)
 	conn.Write(buf.Bytes())
 	return
 }

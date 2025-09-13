@@ -1,13 +1,14 @@
 package main
 
 import (
-	"io"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/samirhembrom/httpfromtcp/internal/headers"
 	"github.com/samirhembrom/httpfromtcp/internal/request"
+	"github.com/samirhembrom/httpfromtcp/internal/response"
 	"github.com/samirhembrom/httpfromtcp/internal/server"
 )
 
@@ -27,13 +28,73 @@ func main() {
 	log.Println("Server gracefully stopped")
 }
 
-func handler(w io.Writer, req *request.Request) server.HandlerError {
+func handler(w *response.Writer, req *request.Request) {
 	target := req.RequestLine.RequestTarget
+	headers := headers.NewHeaders()
+	headers.Set("Content-Type", "text/html")
 	if target == "/yourproblem" {
-		return server.HandlerError{StatusCode: 400, Message: "Your problem is not my problem\n"}
+		err := w.WriteStatusLine(response.BadRequest)
+		if err != nil {
+			return
+		}
+		err = w.WriteHeaders(headers)
+		if err != nil {
+			return
+		}
+		_, err = w.WriteBody([]byte(`<html>
+  <head>
+    <title>400 Bad Request</title>
+  </head>
+  <body>
+    <h1>Bad Request</h1>
+    <p>Your request honestly kinda sucked.</p>
+  </body>
+</html>`))
+		if err != nil {
+			return
+		}
+		return
 	} else if target == "/myproblem" {
-		return server.HandlerError{StatusCode: 500, Message: "Woopsie, my bad\n"}
+		err := w.WriteStatusLine(response.InternalServerError)
+		if err != nil {
+			return
+		}
+		err = w.WriteHeaders(headers)
+		if err != nil {
+			return
+		}
+		_, err = w.WriteBody([]byte(`<html>
+  <head>
+    <title>500 Internal Server Error</title>
+  </head>
+  <body>
+    <h1>Internal Server Error</h1>
+    <p>Okay, you know what? This one is on me.</p>
+  </body>
+</html>`))
+		if err != nil {
+			return
+		}
+		return
 	}
-	w.Write([]byte("All good, frfr\n"))
-	return server.HandlerError{}
+	err := w.WriteStatusLine(response.StatusOK)
+	if err != nil {
+		return
+	}
+	err = w.WriteHeaders(headers)
+	if err != nil {
+		return
+	}
+	_, err = w.WriteBody([]byte(`<html>
+  <head>
+    <title>200 OK</title>
+  </head>
+  <body>
+    <h1>Success!</h1>
+    <p>Your request was an absolute banger.</p>
+  </body>
+</html>`))
+	if err != nil {
+		return
+	}
 }
