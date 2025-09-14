@@ -1,11 +1,14 @@
 package main
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -33,8 +36,8 @@ func main() {
 
 func handler(w *response.Writer, req *request.Request) {
 	target := req.RequestLine.RequestTarget
-	headers := headers.NewHeaders()
 	if target == "/yourproblem" {
+		headers := headers.NewHeaders()
 		err := w.WriteStatusLine(response.BadRequest)
 		if err != nil {
 			return
@@ -57,6 +60,7 @@ func handler(w *response.Writer, req *request.Request) {
 		}
 		return
 	} else if target == "/myproblem" {
+		headers := headers.NewHeaders()
 		err := w.WriteStatusLine(response.InternalServerError)
 		if err != nil {
 			return
@@ -80,6 +84,7 @@ func handler(w *response.Writer, req *request.Request) {
 		return
 	} else if strings.HasPrefix(target, "/httpbin/") {
 		endPoint := "https://httpbin.org/" + strings.TrimPrefix(target, "/httpbin/")
+		hdr := headers.NewHeaders()
 		req, err := http.Get(endPoint)
 		if err != nil {
 			return
@@ -94,16 +99,19 @@ func handler(w *response.Writer, req *request.Request) {
 		if len(reqContType) == 0 {
 			reqContType = "text/plain"
 		}
-		headers.Set("Transfer-Encoding", "chunked")
-		headers.Set("Content-Type", reqContType)
-		err = w.WriteHeaders(headers)
+		hdr.Set("Transfer-Encoding", "chunked")
+		hdr.Set("Content-Type", reqContType)
+		hdr.Set("Trailer", "X-Content-Sha256, X-Content-Length")
+		err = w.WriteHeaders(hdr)
 		if err != nil {
 			return
 		}
 
 		buf := make([]byte, 1024, 1024)
+		var fullBody []byte
 		for {
 			n, err := req.Body.Read(buf)
+			fullBody = append(fullBody, buf[:n]...)
 			if n > 0 {
 				if _, err = w.WriteChunkedBody(buf[:n]); err != nil {
 					return
@@ -117,18 +125,28 @@ func handler(w *response.Writer, req *request.Request) {
 			}
 
 		}
+		hash := sha256.Sum256(fullBody)
+		hexString := fmt.Sprintf("%x", hash[:])
+		trailerHeaders := headers.NewHeaders()
+		trailerHeaders.Set(
+			"X-Content-Sha256",
+			hexString,
+		)
+		trailerHeaders.Set("X-Content-Length", strconv.Itoa(len(fullBody)))
 		_, err = w.WriteChunkedBodyDone()
 		if err != nil {
 			return
 		}
+		w.WriteTrailers(trailerHeaders)
 		return
 
 	}
+	hdr := headers.NewHeaders()
 	err := w.WriteStatusLine(response.StatusOK)
 	if err != nil {
 		return
 	}
-	err = w.WriteHeaders(headers)
+	err = w.WriteHeaders(hdr)
 	if err != nil {
 		return
 	}

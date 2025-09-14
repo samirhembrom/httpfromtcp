@@ -133,3 +133,19 @@ func (w *Writer) WriteChunkedBodyDone() (int, error) {
 	}
 	return n, nil
 }
+
+func (w *Writer) WriteTrailers(h headers.Headers) error {
+	w.w.Write([]byte("0\r\n"))
+	if v, ok := h.Get("x-content-sha256"); ok {
+		if _, err := w.w.Write([]byte("X-Content-Sha256: " + v + "\r\n")); err != nil {
+			return err
+		}
+	}
+	if v, ok := h.Get("x-content-length"); ok {
+		if _, err := w.w.Write([]byte("X-Content-Length: " + v + "\r\n")); err != nil {
+			return err
+		}
+	}
+	_, err := w.w.Write([]byte("\r\n"))
+	return err
+}
