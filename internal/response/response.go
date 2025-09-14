@@ -109,3 +109,27 @@ func NewWriter(w io.Writer) *Writer {
 		writeState: WritingStatusLine,
 	}
 }
+
+func (w *Writer) WriteChunkedBody(p []byte) (int, error) {
+	bytesLenInt := len(p)
+	bytesLenHex := fmt.Sprintf("%x", bytesLenInt)
+	data := append([]byte(bytesLenHex+"\r\n"), p...)
+	data = append(data, []byte("\r\n")...)
+	_, err := w.w.Write(data)
+	if err != nil {
+		return 0, err
+	}
+	return bytesLenInt, nil
+}
+
+func (w *Writer) WriteChunkedBodyDone() (int, error) {
+	if w.writeState != WritingBody {
+		return 0, fmt.Errorf("writes not in correct order")
+	}
+	body := "0\r\n\r\n"
+	n, err := w.w.Write([]byte(body))
+	if err != nil {
+		return 0, err
+	}
+	return n, nil
+}

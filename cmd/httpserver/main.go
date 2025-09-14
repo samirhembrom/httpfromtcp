@@ -1,9 +1,12 @@
 package main
 
 import (
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/samirhembrom/httpfromtcp/internal/headers"
@@ -31,7 +34,6 @@ func main() {
 func handler(w *response.Writer, req *request.Request) {
 	target := req.RequestLine.RequestTarget
 	headers := headers.NewHeaders()
-	headers.Set("Content-Type", "text/html")
 	if target == "/yourproblem" {
 		err := w.WriteStatusLine(response.BadRequest)
 		if err != nil {
@@ -76,6 +78,51 @@ func handler(w *response.Writer, req *request.Request) {
 			return
 		}
 		return
+	} else if strings.HasPrefix(target, "/httpbin/") {
+		endPoint := "https://httpbin.org/" + strings.TrimPrefix(target, "/httpbin/")
+		req, err := http.Get(endPoint)
+		if err != nil {
+			return
+		}
+		defer req.Body.Close()
+
+		err = w.WriteStatusLine(response.StatusCode(req.StatusCode))
+		if err != nil {
+			return
+		}
+		reqContType := req.Header.Get("Content-Type")
+		if len(reqContType) == 0 {
+			reqContType = "text/plain"
+		}
+		headers.Set("Transfer-Encoding", "chunked")
+		headers.Set("Content-Type", reqContType)
+		err = w.WriteHeaders(headers)
+		if err != nil {
+			return
+		}
+
+		buf := make([]byte, 1024, 1024)
+		for {
+			n, err := req.Body.Read(buf)
+			if n > 0 {
+				if _, err = w.WriteChunkedBody(buf[:n]); err != nil {
+					return
+				}
+			}
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return
+			}
+
+		}
+		_, err = w.WriteChunkedBodyDone()
+		if err != nil {
+			return
+		}
+		return
+
 	}
 	err := w.WriteStatusLine(response.StatusOK)
 	if err != nil {
