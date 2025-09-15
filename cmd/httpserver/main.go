@@ -133,11 +133,10 @@ func handler(w *response.Writer, req *request.Request) {
 			hexString,
 		)
 		trailerHeaders.Set("X-Content-Length", strconv.Itoa(len(fullBody)))
-		_, err = w.WriteChunkedBodyDone()
+		err = w.WriteTrailers(trailerHeaders)
 		if err != nil {
 			return
 		}
-		w.WriteTrailers(trailerHeaders)
 		return
 
 	}
