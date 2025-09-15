@@ -139,6 +139,25 @@ func handler(w *response.Writer, req *request.Request) {
 		}
 		return
 
+	} else if target == "/video" {
+		data, err := os.ReadFile("assets/vim.mp4")
+		if err != nil {
+			fmt.Printf("cannot get file")
+			return
+		}
+		headers := headers.NewHeaders()
+		err = w.WriteStatusLine(response.StatusOK)
+		if err != nil {
+			return
+		}
+		headers.Set("Content-Type", "video/mp4")
+		headers.Set("Content-Length", strconv.Itoa(len(data)))
+		err = w.WriteHeaders(headers)
+		if err != nil {
+			return
+		}
+		w.WriteBody(data)
+		return
 	}
 	hdr := headers.NewHeaders()
 	err := w.WriteStatusLine(response.StatusOK)
